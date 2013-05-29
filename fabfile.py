@@ -5,7 +5,7 @@ GIT_NAME = prompt("Enter full Git Target (ex:http://github.com/username/newsite.
 REMOTE_PATH = prompt("Enter full path to create at target(s) (ex: /var/www) :")
 #GIT_NAME = 'http://github.com/konceptz/clientpdp.git'
 #REMOTE_PATH = '/var/new/site'
-
+"""
 def deploy():
 	base_config()
 	with settings():
@@ -16,12 +16,12 @@ def deploy():
 			sudo("git remote add upstream %s" % GIT_NAME)
 			sudo("git fetch upstream")
 			sudo("git merge upstream/master")
-
+"""
 def base_config():
 	#env.sudo_user = 'arthurhinds'
 	#env.password = 'computer1'
 	sudo_user = prompt("Enter Sudo Username on remote target(s) :")
-	env.password = prompt("enter passwd:")	
+	env.password = prompt("enter passwd:")
 
 def update():
 	git_command = prompt("Enter git command to execute against target(s) (ex: git commit -m ""Bug smushed"") :")
