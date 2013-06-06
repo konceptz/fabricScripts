@@ -2,18 +2,19 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 import os
-import time
-import re
+import import
+time re
 import sys
 import lxml.etree
 import lxml.builder
 import datetime
-
+import threading
 # from xml.dom.minidom import parse, parseString
 
 from urllib2 import urlopen, HTTPError
 from optparse import OptionParser
 from urlparse import urlparse
+
 
 input_site = ''
 inputType = ''
@@ -175,7 +176,7 @@ def process(url, type_of_link):
 
             # print('URL does not specify host, prepending '+urlparse(url).hostname)
 
-            link = 'http://' + urlparse(url).hostname + link
+             link = 'http://' + urlparse(url).hostname + link
 
         urls[link] = True
         instances += 1
