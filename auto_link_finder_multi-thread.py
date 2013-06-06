@@ -1,5 +1,12 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+#/  LinkfinderV1 - Sammy Shaar
+#   LinkfinderImgfinderCLI - Arthur Hinds
+#   JenkinsLink-IMGfinder - Arthur Hinds
+#   MultiThread Linkfinder - Arthur Hinds
+#
+#
+#/
 from __future__ import print_function
 import os
 import time
@@ -8,15 +15,16 @@ import sys
 import lxml.etree
 import lxml.builder
 import datetime
-
+import threading
 # from xml.dom.minidom import parse, parseString
 
 from urllib2 import urlopen, HTTPError
 from optparse import OptionParser
 from urlparse import urlparse
+from socket import error as socket_error
 
-input_site = ''
-inputType = ''
+BASE_URL = ''
+TYPE_OF_SEARCH = ''
 BUILD_ENV = ''
 
 TOTAL_TIME = 0
@@ -25,6 +33,8 @@ TOTAL_PASSES = 0
 TOTAL_FAIL = 0
 RESULT = 'passed'
 
+RETURN_CODES = {}
+
 
 def main():
     if len(sys.argv) < 3:
@@ -32,17 +42,17 @@ def main():
         sys.exit()
 
     global BUILD_ENV
-    global input_site
-    global inputType
-    input_site = sys.argv[1]
-    inputType = sys.argv[2]
-    BUILD_ENV = sys.argv[3]
+    global BASE_URL
+    global TYPE_OF_SEARCH
+    BASE_URL = sys.argv[1]
+    TYPE_OF_SEARCH = sys.argv[2]
+    #BUILD_ENV = sys.argv[3]
 
-    if check(input_site):
+    if check(BASE_URL):
         print('INVALID HOSTNAME')
         sys.exit()
-
-    links = getLinks(input_site, inputType)
+   
+    links = getLinks(BASE_URL, TYPE_OF_SEARCH)
 
     print('LINKS TOTAL: ' + str(len(links)))
     output(links)
@@ -54,50 +64,18 @@ def output(links):
     global TOTAL_PASSES
     global TOTAL_FAIL
     global RESULT
-    returncodes = {}
+    global RETURN_CODES
     link_pos = 1
     num_links = len(links)
     TOTAL_TESTS = num_links
-    t0 = time.clock()
-
-    # for link in links:
-    #    print (link)
-
-    for link in links:
-
-        # print ("CHECKING %d OF %d" %(link_pos,num_links))
-
-        try:
-            code = urlopen(link).getcode()
-        except HTTPError, e:
-
-            # print('ERROR %d FROM %s' %(e.code, link))
-
-            code = e.code
-        except:
-            code = 0
-
-        if code in returncodes:
-            returncodes[code].append(link)
-        else:
-            returncodes[code] = [link]
-        if code == 200:
-            TOTAL_PASSES += 1
-        elif code == 404 or code == 0:
-            RESULT = 'failed'
-            TOTAL_FAIL += 1
-        else:
-            TOTAL_FAIL += 1
-
-        link_pos += 1
-
-    # print('TOOK %d SECONDS' % (time.clock() - t0))
-        # returns themd httpstatus codes that were seen
-    # print(returncodes.keys())
+    t0 = time.time()
+    
+    urlprocess(links)
 
     httpstatus = None
-    TOTAL_TIME = str('%d' % (time.clock() - t0))
-    writeFile(links, returncodes)
+    TOTAL_TIME = (str('%d' % (time.time() - t0)))
+    print (TOTAL_TIME)
+    writeFile(links)
 
 
 def getLinks(url_string, type_of_link):
@@ -105,12 +83,15 @@ def getLinks(url_string, type_of_link):
 
 
 def check(site_string):
-    if urlopen(site_string).getcode() == 200:
-        return False
-    else:
-        return True
-
-
+    try:
+        if urlopen(site_string).getcode() == 200:
+            return False
+        else:
+            return True
+    except Exception, e:
+        print (e) 
+        sys.exit()        
+    
 # cleans links
 
 def clean(pattern, url):
@@ -188,10 +169,11 @@ def process(url, type_of_link):
     return urls.keys()
 
 
-def writeFile(links, returncodes):
-    global inputType
-    global input_site
+def writeFile(links):
+    global TYPE_OF_SEARCH
+    global BASE_URL
     global BUILD_ENV
+    global RETURN_CODES
 
     E = lxml.builder.ElementMaker()
     ROOT = E.root
@@ -200,15 +182,15 @@ def writeFile(links, returncodes):
     FIELD2 = E.Code
     now = datetime.datetime.now()
 
-    # print (inputType)
-    # parse the dom for input_site and inputType
+    # print (TYPE_OF_SEARCH)
+    # parse the dom for BASE_URL and TYPE_OF_SEARCH
 
-    # output = ROOT(FIELD1(input_site, name=name))
+    # output = ROOT(FIELD1(BASE_URL, name=name))
 
-    output = selformat(links, returncodes)
+    output = selformat(links)
 
-    for key in returncodes.keys():
-        for link in returncodes[int(key)]:
+    for key in RETURN_CODES.keys():
+        for link in RETURN_CODES[int(key)]:
 
             # output.append(FIELD2(link,name=str(key)))
 
@@ -224,8 +206,8 @@ def writeFile(links, returncodes):
     output += '\n</tbody></table></div></td></tr></table>'
 
     time_str = str(now.strftime('%Y-%m-%d-%H-%M'))
-    timefilename = inputType + '-'
-    timefilename = timefilename + str(urlparse(input_site).hostname)
+    timefilename = TYPE_OF_SEARCH + '-'
+    timefilename = timefilename + str(urlparse(BASE_URL).hostname)
     timefilename = timefilename.replace('\n', '')
     timefilename = timefilename.replace('www.', '')
     timefilename = timefilename.replace('.com', '')
@@ -238,7 +220,7 @@ def writeFile(links, returncodes):
         # print (str(lxml.etree.tostring(output, pretty_print=True)), file=output_temp_file)
         # Log File Output
 
-        thepath = '/var/lib/jenkins/jobs/LinkFinder/workspace'  # % BUILD_ENV
+        thepath = '/var/lib/jenkins/jobs/LinkFinder-Fast/workspace'  # % BUILD_ENV
 
         # os.makedirs(thepath)
 
@@ -253,14 +235,54 @@ def writeFile(links, returncodes):
         print('Unable to open file for writing')
         print(e)
 
+def urlprocess(links):
+    global TOTAL_PASSES
+    global TOTAL_FAIL
+    global RETURN_CODES
+    threads = []
 
-def selformat(links, returncode):
-    global input_site
+    for link in links:
+        thread = threading.Thread(target=eachcode,args=[link])
+        thread.start()
+        threads.append(thread)
+    for thread in threads:
+        thread.join()
+
+
+def eachcode(link):
+    global RETURN_CODES
+    global RESULT
+    global TOTAL_PASSES
+    global TOTAL_FAIL
+    try:
+        code = urlopen(link).getcode()
+    except HTTPError, e:
+        code = e.code
+    except:
+        code = 0
+
+    if code in RETURN_CODES:
+        RETURN_CODES[code].append(link)
+    else:
+        RETURN_CODES[code] = [link]
+    if code == 200:
+        TOTAL_PASSES += 1
+    elif code == 404 or code == 0:
+        RESULT = 'failed'
+        TOTAL_FAIL += 1
+    else:
+        TOTAL_FAIL += 1
+
+
+
+def selformat(links):
+    global BASE_URL
     global TOTAL_TESTS
     global TOTAL_TIME
     global TOTAL_PASSES
     global TOTAL_FAIL
     global RESULT
+    global RETURN_CODES
 
     output = \
         """<html>
@@ -380,7 +402,7 @@ a {
 <tr class="title status_passed"><td rowspan="1" colspan="3">%s</td></tr>
 </thead><tbody>
 ''' \
-        % (input_site, input_site)
+        % (BASE_URL, BASE_URL)
 
     return output
 
